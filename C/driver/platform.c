@@ -40,8 +40,8 @@ static struct file_operations led_chrdev_fops = {
     .open = led_open,
     .write = led_write,
 };
-static int DO_probe(struct platform_device *dev){
-    unsigned int register_data = 0;
+/*----------------平台驱动函数集-----------------*/
+static int do_probe(struct platform_device *dev){
     int ret = 0;
     printk("match successed\n");
 
@@ -80,13 +80,22 @@ static int DO_probe(struct platform_device *dev){
     return -1;
 }
 
+static int do_remove(struct platform_device *dev){
+    device_destroy(LED.class,LED.devid);  /*摧毁设备，类+设备号*/
+    class_destroy(LED.class);
+    cdev_del(LED.ledcdev);
+    unregister_chardev_region(LED.devid,DEV_CNT);
+    return 0;
+}
+
 static const struct of_device_id DO_gpio[] ={
     {.compatible = "wyg,DO"},
     {/*sentinel*/}
 };
 
 struct platform_driver DO_platform_driver = {
-    .probe = DO_probe,
+    .probe = do_probe,
+    .remove = do_remove,
     .driver = {
             .name = "D0",
             .owner = THIS_MODULE,
