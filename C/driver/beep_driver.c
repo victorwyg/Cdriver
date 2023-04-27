@@ -34,7 +34,7 @@ struct beep_dev
     struct device *device;       /*设备*/
     int major;                   /*主设备号*/
     struct device_node *nd;      /*设备节点*/
-    int beep0;                   /*设备别名*/
+    int beep0;                   /*引脚存值变量*/
 };
 
 struct beep_dev Beep;
@@ -96,7 +96,7 @@ static int beep_probe(struct platform_device *dev){
         printk("beep alloc succes\r\n");
         cdev_init(&Beep.cdev,&beep_fops);
         cdev_add(&Beep.cdev,Beep.devid,BEEPDEV_CNT);
-        Beep.class = class_create(THIS_MODULE,BEEPDEV_NAME);
+        Beep.class = class_create(THIS_MODULE,"BEEP");
         if(IS_ERR(Beep.class)){
             return PTR_ERR(Beep.class);
         }
@@ -117,17 +117,19 @@ static int beep_probe(struct platform_device *dev){
             return -EINVAL;
         }
         gpio_request(Beep.beep0, "beep");
-        gpio_direction_output(Beep.beep0, 0); /*设置为输出，默认高电平 */
+        gpio_direction_output(Beep.beep0, 0); /*设置为输出，默认低电平 */
+        printk("probe OK!\r\n");
         return 0;
 }
 
 static int beep_remove(struct platform_device *dev){
     printk("beep remove\r\n");
     gpio_set_value(Beep.beep0, 0); /* 卸载驱动的时候关闭 LED */
-    cdev_del(&Beep.cdev);           /*删除cdev*/
-    unregister_chrdev_region(Beep.devid,BEEPDEV_CNT);
     device_destroy(Beep.class,Beep.devid);
     class_destroy(Beep.class);
+    cdev_del(&Beep.cdev);           /*删除cdev*/
+    unregister_chrdev_region(Beep.devid,BEEPDEV_CNT);
+    printk("remove OK!\r\n");
    return 0;
 }
 static struct of_device_id beep_of_match[] = {
@@ -135,12 +137,13 @@ static struct of_device_id beep_of_match[] = {
     {/*sentinel*/},
 };
 static struct platform_driver beep_driver = {
-    .driver = {
-        .name = "imx6ull-beep",
-        .of_match_table = beep_of_match,         /*匹配表*/
-    },
     .probe = beep_probe,
     .remove = beep_remove,
+    .driver = {
+        .name = "imx6ull-beep",
+        .of_match_table = beep_of_match       /*匹配表*/
+    }
+    
 };
 
 
@@ -152,7 +155,7 @@ static void __exit beep_exit(void)
 {
     
     platform_driver_unregister(&beep_driver);
-    printk("exit");
+    printk("driver exit ok");
 }
 
 

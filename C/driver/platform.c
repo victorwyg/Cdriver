@@ -1,13 +1,23 @@
-
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
+#include <linux/uaccess.h>
+
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <linux/cdev.h>
-#include <linux/device.h>
+#include <linux/delay.h>
+#include <linux/ide.h>
+#include <linux/errno.h>
+#include <linux/gpio.h>
+#include <asm/mach/map.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/of_gpio.h>
-#include <linux/platform_device.h>
+#include <asm/io.h>
+#include <linux/device.h>
 
+#include <linux/platform_device.h>
 /*------------------字符设备内容----------------------*/
 #define DEV_NAME            "rgb-leds"
 #define DEV_CNT                 (1)
@@ -33,13 +43,32 @@ static int led_open(struct inode *inode,struct file *filp){
 
 static ssize_t led_write(struct file *filp,const char __user *buf,size_t cnt,loff_t *offt){
     unsigned char write_data;
-
+    int error = copy_form_user(&write_data,buf,cnt);
+    if(error < 0)
+    return -1;
+    if(write_data & 0x01){
+        gpio_set_value(LED.red,1);
+    }else{
+        gpio_set_value(LED.red,0);
+    }
+    if(write_data & 0x02){
+        gpio_set_value(LED.red,1);
+    }else{
+        gpio_set_value(LED.red,0);
+    }
+    if(write_data & 0x03){
+        gpio_set_value(LED.red,1);
+    }else{
+        gpio_set_value(LED.red,0);
+    }
+    return 0;
 }
 static struct file_operations led_chrdev_fops = {
     .owner = THIS_MODULE,
     .open = led_open,
     .write = led_write,
 };
+
 /*----------------平台驱动函数集-----------------*/
 static int do_probe(struct platform_device *dev){
     int ret = 0;
@@ -48,14 +77,15 @@ static int do_probe(struct platform_device *dev){
     LED.node = of_find_node_by_path("/DO");
     if(LED.node == NULL)
     printk(KERN_EMERG"\t get DO node failed!!");
+
     /*-----获取灯对应引脚-----*/
     LED.red = of_get_named_gpio(LED.node,"red",0);
     LED.green = of_get_named_gpio(LED.node,"green",0);
     LED.blue = of_get_named_gpio(LED.node,"blue",0);
     /*-----设置输入输出方向-----*/
-    gpio_direction_output(LED.red,1);
-    gpio_direction_output(LED.green,1);
-    gpio_direction_output(LED.blue,1);
+    gpio_direction_output(LED.red,0);
+    gpio_direction_output(LED.green,0);
+    gpio_direction_output(LED.blue,0);
     /*-----字符设备注册-----*/
     ret = alloc_chrdev_region(&LED.devid,0,DEV_CNT,DEV_NAME);
     inf(ret < 0){
@@ -83,7 +113,7 @@ static int do_probe(struct platform_device *dev){
 static int do_remove(struct platform_device *dev){
     device_destroy(LED.class,LED.devid);  /*摧毁设备，类+设备号*/
     class_destroy(LED.class);
-    cdev_del(LED.ledcdev);
+    cdev_del(&LED.ledcdev);
     unregister_chardev_region(LED.devid,DEV_CNT);
     return 0;
 }

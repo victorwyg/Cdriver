@@ -1,1 +1,4 @@
-kernel//home/wyg/linux/C/driver/beep_driver.ko
+kernel//home/wyg/linux/C_driver/C/driver/temp3.ko
+kernel//home/wyg/linux/C_driver/C/driver/temp1.ko
+kernel//home/wyg/linux/C_driver/C/driver/temp2.ko
+kernel//home/wyg/linux/C_driver/C/driver/temp4.ko
