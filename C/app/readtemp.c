@@ -17,17 +17,16 @@
     for(int i = 1;i < 5; i++){
         sprintf(dev_name, "/dev/ds18_%d", i);
         if ((fd=open(dev_name,O_RDWR | O_NDELAY | O_NOCTTY)) < 0) {
-         printf("Open Device Ds18b20_%d Failed.\r\n",i);
-         return -1;
+        printf("Open Device Ds18b20_%d Failed.\r\n",i);
+        return -1;
      }
      else
      {
          printf("Open Device Ds18b20_%d Successed.\r\n",i);
-         
-            for(int i = 0;i < 5; i++){
-                readlen = read(fd, buf, sizeof(buf));
+         for(int i = 0;i < 5; i++){
+            readlen = read(fd, buf, sizeof(buf));
              printf("%s", buf);
-             usleep(500000);
+             sleep(1);
             }
          close(fd);
      }

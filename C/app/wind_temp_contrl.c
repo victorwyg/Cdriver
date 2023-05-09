@@ -3,6 +3,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #define ON (1)
 #define OFF (0)
@@ -10,18 +11,24 @@
 #define PATH2 ("/sys/class/leds/Do14/brightness")
 #define PATH3 ("/sys/class/leds/Do15/brightness")
 #define PATH4 ("/sys/class/leds/Do16/brightness")
+#define TEMPOVER (Dev.temp_value[0] < 26 && Dev.temp_value[1] < 26 && Dev.temp_value[2] < 26 && Dev.temp_value[3] < 26 && Dev.temp_value[0] != (-1))
 
 
 
 typedef struct{
+    char mode_code;
+    char mode_code_compare;
+    char fan_sta;
+    char hot_sta;
     int do_value[4];
-    float temp_value[5];
+    float temp_value[4];
     int run_time;
-    int mode_code;
+    int stop;
 } dev;
 dev Dev;
 
 /******************基础操作函数********************/
+
 static int fan_open(void){
     int fd = open(PATH1, O_WRONLY);
     if (fd < 0) {
@@ -61,7 +68,7 @@ static int hot_open(void){
     dprintf(fd, "%d", ON);
     close(fd);
 
-    sleep(11);  /*间隔延时启动*/
+    sleep(11);  /*间隔延时启动，大电流保护*/
 
     fd = open(PATH4, O_WRONLY);
     if (fd < 0) {
@@ -87,94 +94,198 @@ static int hot_close(void){
     close(fd);
     return 0;
 }
-static float temp_read(int ds18_num,char *result){
+static int temp_read(void){         /*传感器温度读取函数*/
     int fd;
-    char buf[6] ={0};
+    char buf[20] ={0};
     char dev_name[20];
     int readlen = 0;
-    switch(ds18_num) {
-        case 1:
-            sprintf(dev_name, "/dev/ds18_1");
-            break;
-        case 2:
-            sprintf(dev_name, "/dev/ds18_2");
-            break;
-        case 3:
-            sprintf(dev_name, "/dev/ds18_3");
-            break;
-        case 4:
-            sprintf(dev_name, "/dev/ds18_4");
-            break;
-        default:
-            printf("Invalid sensor number.\r\n");
-            return -1;
-    }
-    if ((fd = open(dev_name, O_RDWR | O_NDELAY | O_NOCTTY)) < 0) {
+
+    for(int i = 1;i < 5; i++){
+        sprintf(dev_name, "/dev/ds18_%d",i);
+        if ((fd = open(dev_name, O_RDWR | O_NDELAY | O_NOCTTY)) < 0) {
         return -1;
     }
     else {
         readlen = read(fd, buf, sizeof(buf));
-        usleep(2000);
+        Dev.temp_value[i-1] = atof(buf);
+        /*printf("%f\n", Dev.temp_value[i-1]);*/
         close(fd);
     }
-    strcpy(result,buf);
-    return atof(result);
+    memset(buf, 0, sizeof(buf));
+    }
+
+return 0;
 }
+static int sta_read(void){          /*上位状态读取函数*/
+        int fd = 0;
+        char buffer[3] = {0};
+        memset(buffer, 0, sizeof(buffer));
+        fd = open("/root/cmd/start.txt",O_RDONLY);
+        lseek(fd,0,SEEK_SET);
+        read(fd,buffer,1);
 
+        Dev.mode_code = atoi(buffer);
+        /*printf("mode_code is %d\n",Dev.mode_code);*/
+        close(fd);
+        memset(buffer, 0, sizeof(buffer));
+        
+        struct stat st;
+        if (stat("/root/cmd/start.txt", &st) < 0) {
+        printf("Error: stat() failed.\n");
+        return -1;
+        }
+        int size = st.st_size;
+
+        fd = open("/root/cmd/start.txt",O_RDONLY);
+        lseek(fd,1,SEEK_SET);
+        read(fd,buffer,(size - 1));
+        Dev.run_time = atoi(buffer);
+        /*printf("run_time is %d\n",Dev.run_time);*/
+        close(fd);
+        return 0;
+}
 /*******************功能函数*********************/
-static void ventilation_fuc(int time){
-    
+static void ventilation_fuc(void){
+    hot_close();
+    int k = Dev.run_time;
     printf("进入通风模式\n");
-    
-
-
+    for (k; k > 0; k--)
+        {
+            sta_read();
+            if (Dev.mode_code_compare != Dev.mode_code)
+            break;
+            sleep(1);
+            if(Dev.fan_sta != 1)
+            {
+                fan_open();
+                Dev.fan_sta = 1;
+            }
+            printf("通风模式倒计时%d\n",k);
+        }
+        fan_close();
+        Dev.fan_sta = 0;
 }
 static void heating_fuc(){
-    printf("***进入加热模式***\n");
-    if(Dev.temp_value[0] < 20 && Dev.temp_value[0] != (-1))
-    fan_open();
-    sleep(1);
-    hot_open();
-    printf("***加热启动完成***\n");
-    sleep(Dev.run_time);
+        printf("进入加热模式，设定时间%d\n",Dev.run_time+11);
+        int k = Dev.run_time;
+        Dev.mode_code_compare = Dev.mode_code;
+        fan_open();
+        Dev.fan_sta = 1;
+        for (k;k > 0; k--)
+        {
+            sta_read();
+            if (Dev.mode_code_compare != Dev.mode_code)
+            break;
+            
+            temp_read();
+            if(TEMPOVER && Dev.hot_sta != 1)
+            {
+                hot_open();
+                Dev.hot_sta = 1;
+                }
+            if(Dev.temp_value[0] > 30 && Dev.temp_value[0] != (-1))
+            {
+                hot_close();
+                Dev.hot_sta = 0;
+                }
+        }
+        hot_close();
+        Dev.hot_sta = 0;
+        sleep(5);
+        fan_close();
+        Dev.fan_sta = 0;
+        printf("加热模式结束，即将退出\n");
+    }
+static void mitekill_fuc(void){
+printf("进入除螨模式，设定时间%d\n",Dev.run_time+11);
+        int k = Dev.run_time;
+        Dev.mode_code_compare = Dev.mode_code;
+        fan_open();
+        Dev.fan_sta = 1;
+        for (k;k > 0; k--)
+        {
+            sta_read();
+            if (Dev.mode_code_compare != Dev.mode_code)
+            break;
+            
+            temp_read();
+            if(TEMPOVER && Dev.hot_sta != 1)
+            {
+                hot_open();
+                Dev.hot_sta = 1;
+                }
+            if(Dev.temp_value[0] > 50 && Dev.temp_value[0] != (-1))
+            {
+                hot_close();
+                Dev.hot_sta = 0;
+                }
+        }
+        hot_close();
+        Dev.hot_sta = 0;
+        sleep(5);
+        fan_close();
+        Dev.fan_sta = 0;
+        printf("除螨模式结束，即将退出\n");
 }
-static void mitekill_fuc(int time){
-
-}
-static void drying_fuc(int time){
-
+static void drying_fuc(void){
+    printf("进入烘焙模式，设定时间%d\n",Dev.run_time+11);
+        int k = Dev.run_time;
+        Dev.mode_code_compare = Dev.mode_code;
+        fan_open();
+        Dev.fan_sta = 1;
+        for (k;k > 0; k--)
+        {
+            sta_read();
+            if (Dev.mode_code_compare != Dev.mode_code)
+            break;
+            
+            temp_read();
+            if(TEMPOVER && Dev.hot_sta != 1)
+            {
+                hot_open();
+                Dev.hot_sta = 1;
+                }
+            if(Dev.temp_value[0] > 60 && Dev.temp_value[0] != (-1))
+            {
+                hot_close();
+                Dev.hot_sta = 0;
+                }
+        }
+        hot_close();
+        Dev.hot_sta = 0;
+        sleep(5);
+        fan_close();
+        Dev.fan_sta = 0;
+        printf("烘焙模式结束，即将退出\n");
 }
 
 int main(void){
-    
-    int flag = 0;
-    int ds18 = 0;   /*传感器选择*/
-    int i = 1;
-    char *result = malloc(20);
-    
-    
+    Dev.fan_sta = 0;
+    Dev.hot_sta = 0;
+    Dev.mode_code = 0;
     while(1){
-        ds18 = 1;
-        Dev.run_time = 20;
-        for(i;i < 5; i++){
-            Dev.temp_value[i-1] = temp_read(i,result);
-            sleep(0.01);
+
+        sta_read();
+
+        switch (Dev.mode_code)
+        {
+        case 1:
+            ventilation_fuc();
+            break;
+        case 2:
+            heating_fuc();
+            break;
+        case 3:
+            mitekill_fuc();
+            break;
+        case 4:
+            drying_fuc();
+            break;
+        /*default:
+            hot_close();
+            fan_close();
+            break;*/
         }
-        for(i;i < 6; i++){
-            heating_fuc(Dev.run_time);
-            sleep(0.01);
-        }
-        flag++;
-        sleep(1);
-        printf("i is %d,flag is %d\n",i,flag);
-        if(flag == Dev.run_time)
-        break;
     }
-
-
-    hot_close();
-    fan_close();
-    memset(result, 0, sizeof(result));
-    free(result);
     return 0;
 }
