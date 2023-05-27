@@ -56,7 +56,6 @@ static int beep_open(struct inode *inode,struct file *filp)     /*open操作*/
     filp->private_data = &Beep;                                 /*设置私有数据*/
     return 0;
 }
-
 static ssize_t beep_write(struct file *filp,const char __user *buf,size_t cnt,loff_t *offt) /*写函数*/
 {
     int retvalue;
@@ -121,9 +120,8 @@ static int beep_probe(struct platform_device *dev){
         printk("probe OK!\r\n");
         return 0;
 }
-
 static int beep_remove(struct platform_device *dev){
-    printk("beep remove\r\n");
+    printk("beep remove start\r\n");
     gpio_set_value(Beep.beep0, 0); /* 卸载驱动的时候关闭 LED */
     device_destroy(Beep.class,Beep.devid);
     class_destroy(Beep.class);
@@ -146,19 +144,16 @@ static struct platform_driver beep_driver = {
     
 };
 
-
 static int __init beep_init(void)
 {
     return platform_driver_register(&beep_driver);
+    printk("driver init ok\n");
 } 
 static void __exit beep_exit(void)
 {
-    
     platform_driver_unregister(&beep_driver);
-    printk("driver exit ok");
+    printk("driver exit ok\n");
 }
-
-
 
 module_init(beep_init);
 module_exit(beep_exit);

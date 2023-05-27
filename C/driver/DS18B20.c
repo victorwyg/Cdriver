@@ -60,11 +60,11 @@ ds18b20_init(void)
     unsigned long flags;
 
     gpio_direction_output(temp_dev->dev_pin, 1);
-    udelay(100);
+    udelay(60);
     gpio_set_value(temp_dev->dev_pin, 0);
-    udelay(485);
+    udelay(480);
     gpio_set_value(temp_dev->dev_pin, 1);
-    udelay(80);
+    udelay(65);
     spin_lock_irqsave(&temp_dev->lock, flags);
     gpio_direction_input(temp_dev->dev_pin);
     ret = gpio_get_value(temp_dev->dev_pin);
