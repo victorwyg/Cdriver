@@ -16,7 +16,13 @@
 #define PATH5 ("/root/cmd/start.txt")
 #define TEMPOVER (Dev.temp_value[0] < 35 && Dev.temp_value[1] < 35 && Dev.temp_value[2] < 35 && Dev.temp_value[3] < 35 && Dev.temp_value[0] != (-1) && Dev.temp_value[0] != 0)
 #define OPCD ((Dev.old_mode_code != Dev.mode_code || Dev.old_run_time != Dev.run_time || Dev.File_last_time != Dev.file_last_time || Dev.LR_sta != Dev.old_LR_sta) && err_ret == 0 && Dev.mode_code!= 0/*正式需改为!=0*/)
-
+#define STA_SAVE \
+    do { \
+        Dev.old_mode_code = Dev.mode_code; \
+        Dev.old_LR_sta = Dev.LR_sta; \
+        Dev.old_run_time = Dev.run_time; \
+        Dev.File_last_time = Dev.file_last_time; \
+    } while (0)
 
 
 
@@ -558,10 +564,7 @@ int main(void){
     Dev.hot_sta = 0;
 
     sta_read();
-    Dev.old_mode_code = Dev.mode_code;
-    Dev.old_LR_sta = Dev.LR_sta;
-    Dev.old_run_time = Dev.run_time;
-    Dev.File_last_time = Dev.file_last_time;
+    STA_SAVE;
 
     while(1){
         sleep(1);
@@ -597,10 +600,7 @@ int main(void){
             sta_push();
         }
         if (0 == ret1){
-        Dev.old_mode_code = Dev.mode_code;
-        Dev.old_LR_sta = Dev.LR_sta;
-        Dev.old_run_time = Dev.run_time;
-        Dev.File_last_time = Dev.file_last_time;
+        STA_SAVE;
         }
     }
     return 0;
