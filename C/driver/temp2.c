@@ -174,7 +174,7 @@ ds18b20_read(struct file *filp, char *buf, size_t len, loff_t *offset)
     ds18b20_write8(CMD_SKIP_ROM);     // 跳过ROM寻址
     ds18b20_write8(CMD_CONVERT_TEMP); // This command begins a temperature conversion
 
-    mdelay(750);
+    udelay(750);
     if (ds18b20_init() != 0)
     {
         ret = -EFAULT;

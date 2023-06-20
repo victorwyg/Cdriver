@@ -11,7 +11,7 @@
      char buf[20]={0};
      char dev_name[20];
      float result;
-     int readlen = 0;
+     
      
 
     for(int i = 1;i < 5; i++){
@@ -24,9 +24,9 @@
      {
          printf("Open Device Ds18b20_%d Successed.\r\n",i);
          for(int i = 0;i < 5; i++){
-            readlen = read(fd, buf, sizeof(buf));
+            read(fd, buf, sizeof(buf));
              printf("%s", buf);
-             sleep(1);
+             sleep(0.5);
             }
          close(fd);
      }

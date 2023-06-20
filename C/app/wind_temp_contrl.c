@@ -15,7 +15,7 @@
 #define PATH4 ("/sys/class/leds/Do16/brightness")/*左加热*/
 #define PATH5 ("/root/cmd/start.txt")
 #define TEMPOVER (Dev.temp_value[0] < 35 && Dev.temp_value[1] < 35 && Dev.temp_value[2] < 35 && Dev.temp_value[3] < 35 && Dev.temp_value[0] != (-1) && Dev.temp_value[0] != 0)
-#define OPCD ((Dev.old_mode_code != Dev.mode_code || Dev.old_run_time != Dev.run_time || Dev.File_last_time != Dev.file_last_time || Dev.LR_sta != Dev.old_LR_sta) && err_ret == 0 && Dev.mode_code!= 0/*正式需改为!=0*/)
+#define OP_CD ((Dev.old_mode_code != Dev.mode_code || Dev.old_run_time != Dev.run_time || Dev.File_last_time != Dev.file_last_time || Dev.LR_sta != Dev.old_LR_sta) && err_ret == 0 && Dev.mode_code!= 0/*正式需改为!=0*/)
 #define STA_SAVE \
     do { \
         Dev.old_mode_code = Dev.mode_code; \
@@ -31,10 +31,12 @@ typedef struct{
     char old_mode_code;         /*旧模式码*/
     char fan_sta;               /*风扇状态标志*/
     char hot_sta;               /*加热状态标志*/
-    char temp_err;              /*err*温度传感器*/
+
     char fan_err;               /*具体故障风扇，正常为0，DO13故障为1，DO14故障为2,全部故障为3　*/
-    char tp_err[4];             /*具体故障传感器，0000正常，高位代表WD1故障即1000，WD2故障0100　*/
     char hot_err;               /*具体故障加热丝，正常为0，DO15故障为1，DO16故障为2,全部故障为3　*/
+    char temp_err;              /*err*温度传感器*/
+    char tp_err[5];             /*具体故障传感器，0000正常，高位代表WD1故障即1000，WD2故障0100　*/
+
     int run_time;               /*设定运行周期*/
     int old_run_time;           /*旧运行周期*/
     int LR_sta;                 /*左0，右1，全开2*/
@@ -175,11 +177,13 @@ static int temp_read(void){         /*传感器温度读取函数*/
         memset(buf, 0, sizeof(buf));
         printf("temp%d is %f\n",i, Dev.temp_value[i-1]);
         close(fd);
-        if((Dev.temp_value[i-1] < 0) || (Dev.temp_value[i-1] > 100) || (Dev.temp_value[i-1] == 0)){
-            fflush(stdout);
+        }
+        for(int i = 0;i < 4; i++){
+        if((Dev.temp_value[i] < 0) || (Dev.temp_value[i] > 100) || (Dev.temp_value[i] == 0)){
             return -1;
             }
         }
+            
     memset(buf, 0, sizeof(buf));
     }
     fflush(stdout);
@@ -245,7 +249,7 @@ static int sta_read(void){          /*上位状态读取函数*/
         return 0;
 }
 int sta_push(void){                 /*运行状态推送函数*/
-    char sta_buf[10] = {0};
+    char sta_buf[8] = {0};
     sprintf(sta_buf, "%d%s%d%d", Dev.mode_code, Dev.tp_err,Dev.fan_err,Dev.hot_err);
     printf("sta_buf value is %s\r\n",sta_buf);
     int fd = open("/root/cmd/errlist.txt",O_WRONLY | O_CREAT,S_IRWXU | S_IRGRP);
@@ -259,15 +263,15 @@ int sta_push(void){                 /*运行状态推送函数*/
     return 0;
 }
 static int err_jud(void){           /*错误判断函数*/
+    printf("errjud fanhot is %d,%d\r\n",Dev.fan_err,Dev.hot_err);
     int err_ret = 0;
     Dev.temp_err = 0;
     char arr[4] = {0};
     int temp_ret = temp_read();
     printf("temp_ret%d\r\n",temp_ret);
-    
     if(temp_ret < 0){
         for (int i = 0; i < 4; i++){
-        if(err_ret = (Dev.temp_value[i] < 0) || (Dev.temp_value[i] > 150) || (Dev.temp_value[i] == 0)){
+        if(err_ret = (Dev.temp_value[i] < 0) || (Dev.temp_value[i] > 100) || (Dev.temp_value[i] == 0)){
             printf("第%d个温感异常\r\n",i+1);
             arr[i] = 1;
             Dev.temp_err += arr[i];
@@ -277,60 +281,70 @@ static int err_jud(void){           /*错误判断函数*/
         printf("故障传感器 %s\r\n",Dev.tp_err);
         }
     }else{
+        
         for (int i = 0; i < 4; i++){
             arr[i] = 0;
             }
             sprintf(Dev.tp_err,"%d%d%d%d",arr[0],arr[1],arr[2],arr[3]);
-            /*printf("故障传感器 %s\r\n",Dev.tp_err);*/
     }
-    
     
     return err_ret;
 }
-int fanhot_jud(void){
+static int fanhot_jud(){
     printf("风扇加热判断开始\r\n");
+    Dev.hot_err = 0;
+    Dev.fan_err = 0;
     float retbuf[4] = {0};
         for (size_t i = 0; i < 4; i++){
             retbuf[i] = Dev.temp_value[i] - Dev.cp_temp_value[i];
+            printf("retbuf[%d]%f\r\n",i,retbuf[i]);
         }
-        
-        if ((retbuf[2] - retbuf[0]) >= 3){
-                printf("右侧风扇失效(DO15)\r\n");
-                Dev.fan_err = 1;
-                }
-        if ((retbuf[3] - retbuf[1]) >= 3){
-                printf("左侧风扇失效(DO16)\r\n");
-                Dev.fan_err = 2;
+        if (retbuf[0] < 1 && retbuf[2] < 1 && retbuf[1] < 1 && retbuf[3] < 1){
+                printf("两侧加热均失效(DO15 DO16)\r\n");
+                Dev.hot_err = 3;
+                
             }
-        if ((retbuf[2] - retbuf[0]) >= 3 && (retbuf[3] - retbuf[1]) >= 3){
-                printf("两侧风扇均失效(DO15 DO16)\r\n");
-                Dev.fan_err = 3;
-            }else{
-            printf("两侧加热均正常(DO15 DO16)\r\n");
-            Dev.fan_err = 0;
+        else if(retbuf[0] > 1 && retbuf[2] > 1 && retbuf[1] > 1 && retbuf[3] > 1){
+                printf("两侧加热均正常(DO15 DO16)\r\n");
+                Dev.hot_err = 0;
             }
-        if (retbuf[0] < 1.5 && retbuf[2] < 1.5){
+
+        else if (retbuf[0] < 1 && retbuf[2] < 1){
                 printf("右侧加热失效(DO15)\r\n");
                 Dev.hot_err = 1;
             }
-        if (retbuf[1] < 1.5 && retbuf[3] < 1.5){
+        else if (retbuf[1] < 1 && retbuf[3] < 1){
                 printf("左侧加热失效(DO16)\r\n");
                 Dev.hot_err = 2;
             }
-        if (retbuf[0] < 1.5 && retbuf[2] < 1.5 && retbuf[1] < 1.5 && retbuf[3] < 1.5){
-                printf("两侧加热均失效(DO15 DO16)\r\n");
-                Dev.hot_err = 3;
-            }else{
-            printf("两侧加热均正常(DO15 DO16)\r\n");
-            Dev.hot_err = 0;
+        
+        if(Dev.hot_err == 0){
+            if ((retbuf[2] - retbuf[0]) >= 3 && (retbuf[3] - retbuf[1]) >= 3){
+                printf("两侧风扇均失效(DO15 DO16)\r\n");
+                Dev.fan_err = 3;
             }
-
-    if(Dev.fan_err == 0){
-    printf("风扇正常\r\n");
-    }
+            else if((retbuf[2] - retbuf[0]) <= 3 && (retbuf[3] - retbuf[1]) <= 3){
+                printf("两侧风扇均正常(DO15 DO16)\r\n");
+                Dev.fan_err = 0;
+            }
+            else if ((retbuf[2] - retbuf[0]) >= 3){
+                printf("右侧风扇失效(DO15)\r\n");
+                Dev.fan_err = 1;
+                }
+            else if ((retbuf[3] - retbuf[1]) >= 3){
+                printf("左侧风扇失效(DO16)\r\n");
+                Dev.fan_err = 2;
+            }
+            if(Dev.fan_err == 0){
+            printf("风扇正常\r\n");
+            }
+        }
+    
     if(Dev.hot_err == 0){
     printf("加热正常\r\n");
     }
+    
+    return 0;
 }
 /*******************功能函数*********************/
 static int ventilation_fuc(){
@@ -372,17 +386,12 @@ static int ventilation_fuc(){
 static int heating_fuc(){
         printf("进入加热模式，设定周期%d\n",Dev.run_time);
         int k,x = 0;
-        for(int i = 0; i < 3; i++){
+        for(int i = 0; i < 4; i++){
             Dev.cp_temp_value[i] = Dev.temp_value[i];
         }
         fan_open();
         Dev.fan_sta = 1;
-
-        Dev.old_mode_code = Dev.mode_code;          /*同步数值*/
-        Dev.old_LR_sta = Dev.LR_sta;
-        Dev.old_run_time = Dev.run_time;
-        Dev.File_last_time = Dev.file_last_time;
-
+        STA_SAVE;
         for (k;Dev.run_time > k; k++){
             x += 1;
             temp_read();
@@ -403,9 +412,8 @@ static int heating_fuc(){
                 hot_close();
                 Dev.hot_sta = 0;
                 }
-            if(x % 3){     /*在第三个周期执行，出风口温度上升幅度判断*/
-                fanhot_jud();
-            }
+            if((x % 5 == 0) && x<= )/*在第三个周期执行，出风口温度上升幅度判断*/
+            fanhot_jud();
             printf("加热循环周期剩余%d\r\n",Dev.run_time-k);
             err_jud();
             sta_push();
@@ -564,6 +572,7 @@ int main(void){
     Dev.hot_sta = 0;
 
     sta_read();
+    temp_read();
     STA_SAVE;
 
     while(1){
@@ -572,7 +581,7 @@ int main(void){
         ret = sta_read();       /*读取状态修改，文件时间*/
         int err_ret = err_jud();        /*err_ret为真，则无法进行之后动作*/
         
-        if(OPCD){
+        if(OP_CD){
         switch (Dev.mode_code){
             case 1:
                 ret1 = ventilation_fuc();
@@ -593,6 +602,10 @@ int main(void){
             if (0 > ret1){
             printf("功能循环中断\r\n");
             Dev.File_last_time = 1;
+            fan_close();
+            Dev.fan_sta = 0;
+            hot_close();
+            Dev.hot_sta = 0;
             }
         }else{
             printf("File time not change,Waiting for command\r\n");
