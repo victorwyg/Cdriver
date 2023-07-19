@@ -15,6 +15,7 @@
 #define PATH4 ("/sys/class/leds/Do16/brightness")/*左加热*/
 #define PATH5 ("/root/cmd/start.txt")
 #define TEMPOVER (Dev.temp_value[0] < 50 && Dev.temp_value[1] < 50 && Dev.temp_value[2] < 50 && Dev.temp_value[3] < 50 && Dev.temp_value[0] != (-1) && Dev.temp_value[0] != 0)
+#define TEMPOK (Dev.temp_value[0] > 50 && Dev.temp_value[1] > 50 && Dev.temp_value[2] > 50 && Dev.temp_value[3] > 50 && Dev.temp_value[0] != (-1) && Dev.temp_value[0] != 0)
 #define OP_CD ((Dev.old_mode_code != Dev.mode_code || Dev.old_run_time != Dev.run_time || Dev.File_last_time != Dev.file_last_time || Dev.LR_sta != Dev.old_LR_sta) && (Dev.result == 12 || Dev.result == 8 || Dev.result < 5) && Dev.mode_code!= 0/*正式需改为!=0*/)
 #define STA_SAVE \
     do { \
@@ -313,6 +314,7 @@ static int fanhot_jud(){
     Dev.hot_err = 0;
     Dev.fan_err = 0;
     float retbuf[4] = {0};
+        if(Dev.result == 0){
         for (size_t i = 0; i < 4; i++){
             retbuf[i] = Dev.temp_value[i] - Dev.cp_temp_value[i];
             printf("retbuf[%d]%f\r\n",i,retbuf[i]);
@@ -322,7 +324,7 @@ static int fanhot_jud(){
                 Dev.hot_err = 3;
                 
             }
-        else if(retbuf[0] > 0.8 && retbuf[2] > 0.8 && retbuf[1] > 0.8 && retbuf[3] > 0.8){
+        else if(retbuf[0] > 0.8 && retbuf[2] > 0.8 && retbuf[1] > 0.8 && retbuf[3] > 0.8 || TEMPOK){
                 printf("两侧加热均正常(DO15 DO16)\r\n");
                 Dev.hot_err = 0;
             }
@@ -353,14 +355,14 @@ static int fanhot_jud(){
                 printf("左侧风扇失效(DO16)\r\n");
                 Dev.fan_err = 2;
             }
-            if(Dev.fan_err == 0){
+            if(Dev.fan_err == 0 || TEMPOK){
             printf("风扇正常\r\n");
             }
         }
     
     if(Dev.hot_err == 0){
     printf("加热正常\r\n");
-    }
+    }}
     
     return 0;
 }
@@ -435,8 +437,9 @@ static int heating_fuc(){
             err_jud();
             sta_push();
             sleep(1);
-            if((x % 25 == 0) && x<= 75 && TEMPOVER)/*在第三个周期执行，出风口温度上升幅度判断*/
+            if((x % 25 == 0) && x <= 75 && TEMPOVER){/*在第25个周期执行，出风口温度上升幅度判断*/
             fanhot_jud();
+            }
         }
         hot_close();
         Dev.hot_sta = 0;

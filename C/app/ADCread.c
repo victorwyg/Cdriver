@@ -22,14 +22,16 @@
 
 static char *file_path[] = {
     "/sys/bus/iio/devices/iio:device0/in_voltage_scale",
+    "/sys/bus/iio/devices/iio:device0/in_voltage5_raw",
     "/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
     "/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
     "/sys/bus/iio/devices/iio:device0/in_voltage4_raw",
-    "/sys/bus/iio/devices/iio:device0/in_voltage5_raw",
+    
     "/sys/bus/iio/devices/iio:device0/in_voltage6_raw",
     "/sys/bus/iio/devices/iio:device0/in_voltage7_raw",
-    "/sys/bus/iio/devices/iio:device0/in_voltage8_raw",
+    
     "/sys/bus/iio/devices/iio:device0/in_voltage9_raw",
+    "/sys/bus/iio/devices/iio:device0/in_voltage8_raw",
 };
 
 enum path_index {
